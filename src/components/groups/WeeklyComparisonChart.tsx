@@ -19,7 +19,7 @@ export default function WeeklyComparisonChart({ weeklyData, memberNames }: Props
         <BarChart data={weeklyData} margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
           <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 11 }}
-            tickFormatter={(v: string) => new Date(v).toLocaleDateString("en", { weekday: "short" })} />
+            tickFormatter={(v: string) => new Date(v + "T00:00:00").toLocaleDateString("en", { weekday: "short" })} />
           <YAxis tick={{ fill: "#71717a", fontSize: 11 }} allowDecimals={false} />
           <Tooltip
             contentStyle={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: 8 }}
