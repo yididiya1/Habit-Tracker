@@ -2,9 +2,11 @@
 
 import { useEffect, useState, useCallback } from "react"
 import { format } from "date-fns"
-import { Loader2, CalendarDays } from "lucide-react"
+import { Loader2, CalendarDays, Users } from "lucide-react"
 import { formatDuration } from "@/lib/utils"
 import TodayHabitRow from "./TodayHabitRow"
+import GroupTodayHabitRow from "./GroupTodayHabitRow"
+import type { GroupTodayItem } from "@/app/api/today/groups/route"
 
 interface HabitLog {
   id: string
@@ -26,12 +28,17 @@ interface HabitWithLog {
 
 export default function TodayView() {
   const [habits, setHabits] = useState<HabitWithLog[]>([])
+  const [groupHabits, setGroupHabits] = useState<GroupTodayItem[]>([])
   const [loading, setLoading] = useState(true)
 
   const fetchToday = useCallback(async () => {
     setLoading(true)
-    const res = await fetch("/api/today")
+    const [res, groupRes] = await Promise.all([
+      fetch("/api/today"),
+      fetch("/api/today/groups"),
+    ])
     if (res.ok) setHabits(await res.json())
+    if (groupRes.ok) setGroupHabits(await groupRes.json())
     setLoading(false)
   }, [])
 
@@ -45,6 +52,14 @@ export default function TodayView() {
         h.id === habitId
           ? { ...h, log: { ...(h.log ?? { id: "", note: null }), ...log } as HabitLog }
           : h
+      )
+    )
+  }
+
+  function handleGroupUpdate(groupHabitId: string, log: GroupTodayItem["log"]) {
+    setGroupHabits((prev) =>
+      prev.map((item) =>
+        item.groupHabitId === groupHabitId ? { ...item, log } : item
       )
     )
   }
@@ -172,6 +187,31 @@ export default function TodayView() {
         </div>
       )}
 
+      {/* ── From Groups ─────────────────────────────────────────── */}
+      {!loading && groupHabits.length > 0 && (
+        <div className="space-y-2">
+          {/* Section header */}
+          <div className="flex items-center gap-2">
+            <Users className="h-3.5 w-3.5 text-zinc-500" />
+            <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              From Groups
+            </p>
+            <div className="flex-1 border-t border-zinc-800" />
+            <span className="text-xs text-zinc-600">
+              {groupHabits.filter((g) => g.log?.completed).length}/
+              {groupHabits.length}
+            </span>
+          </div>
+
+          {groupHabits.map((item) => (
+            <GroupTodayHabitRow
+              key={item.groupHabitId}
+              item={item}
+              onUpdate={handleGroupUpdate}
+            />
+          ))}
+        </div>
+      )}
 
     </div>
   )
