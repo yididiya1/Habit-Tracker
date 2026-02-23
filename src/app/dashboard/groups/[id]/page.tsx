@@ -26,7 +26,6 @@ export default function GroupDetailPage() {
   const [stats, setStats] = useState<Record<string, unknown> | null>(null)
   const [session, setSession] = useState<{ user: { id: string } } | null>(null)
   const [tab, setTab] = useState<Tab>("stats")
-  const [toggling, setToggling] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -49,17 +48,6 @@ export default function GroupDetailPage() {
 
   useEffect(() => { load() }, [load])
 
-  async function handleToggle(habitId: string) {
-    setToggling(habitId)
-    await fetch(`/api/groups/${id}/today`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ habitId, completed: true }),
-    })
-    await load()
-    setToggling(null)
-  }
-
   function copyJoinCode() {
     if (!group) return
     navigator.clipboard.writeText(`${window.location.origin}/join/${group.joinCode}`)
@@ -74,7 +62,7 @@ export default function GroupDetailPage() {
   const g = group as {
     id: string; name: string; emoji: string; color: string; description: string | null
     joinCode: string; endDate: string | null; myRole: string
-    habits: { id: string; name: string; type: string; color: string }[]
+    habits: { id: string; name: string; type: string; color: string; targetCount: number | null }[]
     members: { role: string; user: { id: string; name: string | null; image: string | null; email: string | null } }[]
   }
   const myUserId = session?.user?.id ?? ""
@@ -155,11 +143,11 @@ export default function GroupDetailPage() {
                   key={habit.id}
                   habit={habit}
                   members={todayData.members as { user: { id: string; name: string | null; image: string | null } }[]}
-                  myLogs={(todayData.habits as { id: string; logs: { userId: string; completed: boolean }[] }[])
+                  myLogs={(todayData.habits as { id: string; logs: { userId: string; completed: boolean; duration: number | null; count: number | null }[] }[])
                     .find((h) => h.id === habit.id)?.logs ?? []}
                   myUserId={myUserId}
-                  onToggle={handleToggle}
-                  toggling={toggling}
+                  groupId={g.id}
+                  onRefresh={load}
                 />
               ))}
             </div>
