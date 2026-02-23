@@ -222,14 +222,20 @@ export default function TodayGroupCheckin({
           <Button
             variant="ghost" size="icon" className="h-8 w-8"
             disabled={saving || loggedCount <= 0}
-            onClick={() => patch({ count: -1 })}
+            onClick={() => {
+              const newCount = loggedCount - 1
+              patch({ count: -1, completed: newCount >= targetCount })
+            }}
           >
             <Minus className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost" size="icon" className="h-8 w-8"
             disabled={saving}
-            onClick={() => patch({ count: 1 })}
+            onClick={() => {
+              const newCount = loggedCount + 1
+              patch({ count: 1, completed: newCount >= targetCount })
+            }}
           >
             {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
           </Button>
