@@ -14,18 +14,24 @@ interface ChatMessage {
   user: { id: string; name: string | null; image: string | null }
 }
 
-const POLL_MS = 3000
+const POLL_OPEN_MS = 3000   // poll every 3s while panel is open
+const POLL_BG_MS  = 10000  // poll every 10s while panel is closed (for badge)
 
 export default function GroupChatPanel({ groupId, groupName }: { groupId: string; groupName: string }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen]         = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [input, setInput] = useState("")
-  const [sending, setSending] = useState(false)
+  const [input, setInput]       = useState("")
+  const [sending, setSending]   = useState(false)
   const [myUserId, setMyUserId] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const bottomRef = useRef<HTMLDivElement>(null)
-  const lastIdRef = useRef<string | null>(null)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [loading, setLoading]   = useState(false)
+  const [unread, setUnread]     = useState(0)
+
+  const bottomRef  = useRef<HTMLDivElement>(null)
+  const lastIdRef  = useRef<string | null>(null)   // latest fetched message id
+  const pollRef    = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // localStorage key scoped to this group
+  const lsKey = `chat_read_${groupId}`
 
   // Fetch session once on mount
   useEffect(() => {
@@ -34,6 +40,7 @@ export default function GroupChatPanel({ groupId, groupName }: { groupId: string
       .then((s) => setMyUserId(s?.user?.id ?? null))
   }, [])
 
+  // ── fetch helpers ──────────────────────────────────────────────
   const fetchMessages = useCallback(async (initial = false) => {
     if (initial) setLoading(true)
     try {
@@ -44,6 +51,7 @@ export default function GroupChatPanel({ groupId, groupName }: { groupId: string
       if (!res.ok) return
       const data: ChatMessage[] = await res.json()
       if (data.length === 0) return
+
       setMessages((prev) => {
         const existingIds = new Set(prev.map((m) => m.id))
         const newOnes = data.filter((m) => !existingIds.has(m.id))
@@ -55,22 +63,56 @@ export default function GroupChatPanel({ groupId, groupName }: { groupId: string
     }
   }, [groupId])
 
-  // Start/stop polling when panel opens or closes
+  // Background poll (panel closed) — only counts unread from others
+  const bgPoll = useCallback(async () => {
+    const lastRead = typeof window !== "undefined" ? localStorage.getItem(lsKey) : null
+    const url = lastRead
+      ? `/api/groups/${groupId}/messages?cursor=${lastRead}`
+      : `/api/groups/${groupId}/messages`
+    const res = await fetch(url)
+    if (!res.ok) return
+    const data: ChatMessage[] = await res.json()
+    if (data.length === 0) return
+    // Count only messages from others
+    setUnread((prev) => {
+      const fromOthers = data.filter((m) => m.user.id !== myUserId).length
+      return prev + fromOthers
+    })
+    lastIdRef.current = data[data.length - 1].id
+  }, [groupId, lsKey, myUserId])
+
+  // ── polling orchestration ──────────────────────────────────────
   useEffect(() => {
+    if (pollRef.current) clearInterval(pollRef.current)
     if (open) {
       fetchMessages(true)
-      pollRef.current = setInterval(() => fetchMessages(false), POLL_MS)
+      pollRef.current = setInterval(() => fetchMessages(false), POLL_OPEN_MS)
     } else {
-      if (pollRef.current) clearInterval(pollRef.current)
+      pollRef.current = setInterval(bgPoll, POLL_BG_MS)
     }
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
-  }, [open, fetchMessages])
+  }, [open, fetchMessages, bgPoll])
 
-  // Scroll to bottom whenever messages change and panel is open
+  // ── mark as read when panel opens ─────────────────────────────
   useEffect(() => {
-    if (open) bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages, open])
+    if (open) {
+      setUnread(0)
+      if (lastIdRef.current) {
+        localStorage.setItem(lsKey, lastIdRef.current)
+      }
+    }
+  }, [open, lsKey])
 
+  // Mark as read when new messages arrive and panel is already open
+  useEffect(() => {
+    if (open && lastIdRef.current) {
+      localStorage.setItem(lsKey, lastIdRef.current)
+      setUnread(0)
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+    }
+  }, [messages, open, lsKey])
+
+  // ── send ───────────────────────────────────────────────────────
   async function sendMessage() {
     const text = input.trim()
     if (!text || sending) return
@@ -89,6 +131,7 @@ export default function GroupChatPanel({ groupId, groupName }: { groupId: string
           return [...prev, msg]
         })
         lastIdRef.current = msg.id
+        localStorage.setItem(lsKey, msg.id)
       }
     } finally {
       setSending(false)
@@ -101,8 +144,20 @@ export default function GroupChatPanel({ groupId, groupName }: { groupId: string
 
   return (
     <>
-      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setOpen(true)} title="Group chat">
+      {/* Chat button with unread dot */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="relative h-8 w-8"
+        onClick={() => setOpen(true)}
+        title="Group chat"
+      >
         <MessageSquare className="h-4 w-4" />
+        {unread > 0 && (
+          <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white leading-none">
+            {unread > 99 ? "99+" : unread}
+          </span>
+        )}
       </Button>
 
       {/* Slide-in panel */}
@@ -135,7 +190,6 @@ export default function GroupChatPanel({ groupId, groupName }: { groupId: string
                 const isMe = m.user.id === myUserId
                 return (
                   <div key={m.id} className={cn("flex flex-col", isMe ? "items-end" : "items-start")}>
-                    {/* Avatar + name for others */}
                     {!isMe && (
                       <div className="mb-1 flex items-center gap-1.5">
                         {m.user.image ? (
