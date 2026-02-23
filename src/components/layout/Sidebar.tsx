@@ -21,7 +21,6 @@ const NAV = [
   { href: "/dashboard/timer", label: "Timer", icon: Clock },
   { href: "/dashboard/groups", label: "Groups", icon: Users },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart2 },
-  { href: "/dashboard/analytics", label: "Analytics", icon: BarChart2 },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ]
 
