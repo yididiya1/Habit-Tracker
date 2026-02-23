@@ -65,6 +65,9 @@ export default function GroupChatPanel({ groupId, groupName }: { groupId: string
 
   // Background poll (panel closed) — only counts unread from others
   const bgPoll = useCallback(async () => {
+    // Don't poll until we know who the current user is — avoids counting own
+    // messages as unread during the async session fetch on initial load.
+    if (!myUserId) return
     const lastRead = typeof window !== "undefined" ? localStorage.getItem(lsKey) : null
     const url = lastRead
       ? `/api/groups/${groupId}/messages?cursor=${lastRead}`
@@ -73,12 +76,13 @@ export default function GroupChatPanel({ groupId, groupName }: { groupId: string
     if (!res.ok) return
     const data: ChatMessage[] = await res.json()
     if (data.length === 0) return
-    // Count only messages from others
-    setUnread((prev) => {
-      const fromOthers = data.filter((m) => m.user.id !== myUserId).length
-      return prev + fromOthers
-    })
-    lastIdRef.current = data[data.length - 1].id
+    const fromOthers = data.filter((m) => m.user.id !== myUserId).length
+    if (fromOthers > 0) setUnread((prev) => prev + fromOthers)
+    // Persist the cursor so the next poll (or page reload) doesn't re-count
+    // the same messages as unread again.
+    const latestId = data[data.length - 1].id
+    lastIdRef.current = latestId
+    if (typeof window !== "undefined") localStorage.setItem(lsKey, latestId)
   }, [groupId, lsKey, myUserId])
 
   // ── polling orchestration ──────────────────────────────────────
@@ -88,6 +92,9 @@ export default function GroupChatPanel({ groupId, groupName }: { groupId: string
       fetchMessages(true)
       pollRef.current = setInterval(() => fetchMessages(false), POLL_OPEN_MS)
     } else {
+      // Only start background polling once the session is resolved.
+      // If myUserId is still null here the interval will fire correctly once
+      // the dependency changes and this effect re-runs with the real value.
       pollRef.current = setInterval(bgPoll, POLL_BG_MS)
     }
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
