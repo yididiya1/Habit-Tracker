@@ -24,6 +24,8 @@ export default function WeeklyComparisonChart({ weeklyData, memberNames }: Props
           <Tooltip
             contentStyle={{ backgroundColor: "#18181b", border: "1px solid #27272a", borderRadius: 8 }}
             labelStyle={{ color: "#a1a1aa" }}
+            itemStyle={{ color: "#e4e4e7" }}
+            cursor={{ fill: "rgba(63, 63, 70, 0.4)" }}
           />
           <Legend wrapperStyle={{ fontSize: 11, color: "#71717a" }} />
           {memberNames.map((name, i) => (

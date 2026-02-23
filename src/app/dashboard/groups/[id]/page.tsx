@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Image from "next/image"
-import { ArrowLeft, Copy, Check, Settings, Loader2, Users, BarChart2, CalendarDays } from "lucide-react"
+import { ArrowLeft, Copy, Check, Settings, Loader2, Users, BarChart2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { format, differenceInDays } from "date-fns"
@@ -15,7 +15,7 @@ import MemberHeatmapGrid from "@/components/groups/MemberHeatmapGrid"
 import GroupChatPanel from "@/components/groups/GroupChatPanel"
 import GroupSettingsPanel from "@/components/groups/GroupSettingsPanel"
 
-type Tab = "today" | "stats" | "members"
+type Tab = "stats" | "members"
 
 export default function GroupDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -25,7 +25,7 @@ export default function GroupDetailPage() {
   const [todayData, setTodayData] = useState<{ habits: unknown[]; members: unknown[] } | null>(null)
   const [stats, setStats] = useState<Record<string, unknown> | null>(null)
   const [session, setSession] = useState<{ user: { id: string } } | null>(null)
-  const [tab, setTab] = useState<Tab>("today")
+  const [tab, setTab] = useState<Tab>("stats")
   const [toggling, setToggling] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
@@ -131,9 +131,10 @@ export default function GroupDetailPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 rounded-xl bg-zinc-800/50 p-1 w-fit">
-        {([["today", <CalendarDays key="t" className="h-3.5 w-3.5" />, "Today"],
-           ["stats", <BarChart2 key="s" className="h-3.5 w-3.5" />, "Stats"],
-           ["members", <Users key="m" className="h-3.5 w-3.5" />, "Members"]] as const).map(([t, icon, label]) => (
+        {([
+          ["stats", <BarChart2 key="s" className="h-3.5 w-3.5" />, "Stats"],
+          ["members", <Users key="m" className="h-3.5 w-3.5" />, "Members"],
+        ] as const).map(([t, icon, label]) => (
           <button key={t} onClick={() => setTab(t as Tab)}
             className={cn("flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
               tab === t ? "bg-zinc-700 text-zinc-100" : "text-zinc-500 hover:text-zinc-300")}>
@@ -142,38 +143,40 @@ export default function GroupDetailPage() {
         ))}
       </div>
 
-      {/* Today tab */}
-      {tab === "today" && todayData && (
+      {/* Stats tab — Today check-in + Leaderboard + Consistency as 3-col top row, then charts */}
+      {tab === "stats" && stats && todayData && (
         <div className="space-y-4">
-          {g.habits.map((habit) => (
-            <TodayGroupCheckin
-              key={habit.id}
-              habit={habit}
-              members={todayData.members as { user: { id: string; name: string | null; image: string | null } }[]}
-              myLogs={(todayData.habits as { id: string; logs: { userId: string; completed: boolean }[] }[])
-                .find((h) => h.id === habit.id)?.logs ?? []}
-              myUserId={myUserId}
-              onToggle={handleToggle}
-              toggling={toggling}
-            />
-          ))}
-        </div>
-      )}
+          {/* Top 3-column row */}
+          <div className="grid gap-4 lg:grid-cols-3">
+            {/* Today check-in column */}
+            <div className="space-y-3">
+              {g.habits.map((habit) => (
+                <TodayGroupCheckin
+                  key={habit.id}
+                  habit={habit}
+                  members={todayData.members as { user: { id: string; name: string | null; image: string | null } }[]}
+                  myLogs={(todayData.habits as { id: string; logs: { userId: string; completed: boolean }[] }[])
+                    .find((h) => h.id === habit.id)?.logs ?? []}
+                  myUserId={myUserId}
+                  onToggle={handleToggle}
+                  toggling={toggling}
+                />
+              ))}
+            </div>
+            {/* Streak leaderboard */}
+            <MemberLeaderboard streaks={(stats as { streaks: { userId: string; name: string | null; image: string | null; streak: number }[] }).streaks} />
+            {/* Consistency rings */}
+            <ConsistencyRings consistency={(stats as { consistency: { userId: string; name: string | null; image: string | null; pct: number; completed: number }[] }).consistency} />
+          </div>
 
-      {/* Stats tab */}
-      {tab === "stats" && stats && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <MemberLeaderboard streaks={(stats as { streaks: { userId: string; name: string | null; image: string | null; streak: number }[] }).streaks} />
-          <ConsistencyRings consistency={(stats as { consistency: { userId: string; name: string | null; image: string | null; pct: number; completed: number }[] }).consistency} />
-          <div className="lg:col-span-2">
-            <WeeklyComparisonChart
-              weeklyData={(stats as { weeklyData: Record<string, string | number>[] }).weeklyData}
-              memberNames={(stats as { memberNames: string[] }).memberNames}
-            />
-          </div>
-          <div className="lg:col-span-2">
-            <MemberHeatmapGrid heatmap={(stats as { heatmap: { userId: string; name: string | null; image: string | null; days: { date: string; completed: boolean }[] }[] }).heatmap} />
-          </div>
+          {/* Weekly chart */}
+          <WeeklyComparisonChart
+            weeklyData={(stats as { weeklyData: Record<string, string | number>[] }).weeklyData}
+            memberNames={(stats as { memberNames: string[] }).memberNames}
+          />
+
+          {/* Heatmap */}
+          <MemberHeatmapGrid heatmap={(stats as { heatmap: { userId: string; name: string | null; image: string | null; days: { date: string; completed: boolean }[] }[] }).heatmap} />
         </div>
       )}
 
