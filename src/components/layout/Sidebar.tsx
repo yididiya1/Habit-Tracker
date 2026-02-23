@@ -10,6 +10,7 @@ import {
   Settings,
   CalendarDays,
   Sparkles,
+  Users,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -18,6 +19,7 @@ const NAV = [
   { href: "/dashboard/habits", label: "Habits", icon: CheckSquare },
   { href: "/dashboard/today", label: "Today", icon: CalendarDays },
   { href: "/dashboard/timer", label: "Timer", icon: Clock },
+  { href: "/dashboard/groups", label: "Groups", icon: Users },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart2 },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ]

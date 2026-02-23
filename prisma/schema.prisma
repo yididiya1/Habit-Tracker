@@ -44,6 +44,9 @@ model User {
   sessions      Session[]
   habits        Habit[]
   habitLogs     HabitLog[]
+  ownedGroups   Group[]         @relation("OwnedGroups")
+  groupMembers  GroupMember[]
+  groupHabitLogs GroupHabitLog[]
 }
 
 model VerificationToken {
@@ -94,4 +97,74 @@ enum HabitType {
   CHECKBOX
   TIMER
   COUNT
+}
+
+// ─── Group Habits ─────────────────────────────────────────────────────────────
+
+model Group {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  emoji       String    @default("🎯")
+  color       String    @default("#6366f1")
+  joinCode    String    @unique
+  endDate     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  ownerId String
+  owner   User   @relation("OwnedGroups", fields: [ownerId], references: [id])
+
+  members GroupMember[]
+  habits  GroupHabit[]
+}
+
+model GroupMember {
+  id       String    @id @default(cuid())
+  role     GroupRole @default(MEMBER)
+  joinedAt DateTime  @default(now())
+
+  groupId String
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+}
+
+model GroupHabit {
+  id          String    @id @default(cuid())
+  name        String
+  type        HabitType @default(CHECKBOX)
+  color       String    @default("#6366f1")
+  targetCount Int?
+  createdAt   DateTime  @default(now())
+
+  groupId String
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  logs GroupHabitLog[]
+}
+
+model GroupHabitLog {
+  id        String   @id @default(cuid())
+  date      DateTime @db.Date
+  completed Boolean  @default(false)
+  duration  Int?
+  count     Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  habitId String
+  habit   GroupHabit @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([habitId, userId, date])
+}
+
+enum GroupRole {
+  OWNER
+  ADMIN
+  MEMBER
 }
