@@ -188,7 +188,10 @@ export default function GroupTodayHabitRow({ item, onUpdate }: GroupTodayHabitRo
           size="icon"
           className="h-7 w-7"
           disabled={saving || loggedCount <= 0}
-          onClick={() => patch({ habitId: item.groupHabitId, count: -1 })}
+          onClick={() => {
+            const newCount = loggedCount - 1
+            patch({ habitId: item.groupHabitId, count: -1, completed: newCount >= targetCount })
+          }}
         >
           <Minus className="h-3.5 w-3.5" />
         </Button>
@@ -198,7 +201,10 @@ export default function GroupTodayHabitRow({ item, onUpdate }: GroupTodayHabitRo
           size="icon"
           className="h-7 w-7"
           disabled={saving}
-          onClick={() => patch({ habitId: item.groupHabitId, count: 1 })}
+          onClick={() => {
+            const newCount = loggedCount + 1
+            patch({ habitId: item.groupHabitId, count: 1, completed: newCount >= targetCount })
+          }}
         >
           {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
         </Button>

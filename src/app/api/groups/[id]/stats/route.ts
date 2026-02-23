@@ -64,13 +64,22 @@ export async function GET(req: Request, { params }: Params) {
     return format(d, "yyyy-MM-dd")
   })
 
+  // Map habitId → type so we can show raw count/duration instead of 0/1
+  const habitTypeMap = new Map(habits.map((h) => [h.id, h.type]))
+
   const weeklyData = last7.map((dateStr) => {
     const entry: Record<string, string | number> = { date: dateStr }
     members.forEach((m) => {
-      const completed = logs.filter(
-        (l) => l.userId === m.userId && format(l.date, "yyyy-MM-dd") === dateStr && l.completed
-      ).length
-      entry[m.user.name ?? m.userId] = completed
+      const dayLogs = logs.filter(
+        (l) => l.userId === m.userId && format(l.date, "yyyy-MM-dd") === dateStr
+      )
+      const value = dayLogs.reduce((sum, l) => {
+        const type = habitTypeMap.get(l.habitId)
+        if (type === "COUNT") return sum + (l.count ?? 0)
+        if (type === "TIMER") return sum + (l.duration ?? 0)
+        return sum + (l.completed ? 1 : 0)
+      }, 0)
+      entry[m.user.name ?? m.userId] = value
     })
     return entry
   })
