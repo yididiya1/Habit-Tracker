@@ -44,9 +44,10 @@ model User {
   sessions      Session[]
   habits        Habit[]
   habitLogs     HabitLog[]
-  ownedGroups   Group[]         @relation("OwnedGroups")
-  groupMembers  GroupMember[]
+  ownedGroups    Group[]          @relation("OwnedGroups")
+  groupMembers   GroupMember[]
   groupHabitLogs GroupHabitLog[]
+  groupMessages  GroupMessage[]
 }
 
 model VerificationToken {
@@ -115,8 +116,9 @@ model Group {
   ownerId String
   owner   User   @relation("OwnedGroups", fields: [ownerId], references: [id])
 
-  members GroupMember[]
-  habits  GroupHabit[]
+  members  GroupMember[]
+  habits   GroupHabit[]
+  messages GroupMessage[]
 }
 
 model GroupMember {
@@ -161,6 +163,18 @@ model GroupHabitLog {
   user    User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([habitId, userId, date])
+}
+
+model GroupMessage {
+  id        String   @id @default(cuid())
+  text      String
+  createdAt DateTime @default(now())
+
+  groupId String
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 enum GroupRole {

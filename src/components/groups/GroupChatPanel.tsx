@@ -1,32 +1,102 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
+import Image from "next/image"
 import { MessageSquare, X, Send, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 
-interface Message {
+interface ChatMessage {
   id: string
   text: string
-  sender: string
-  time: string
+  createdAt: string
+  user: { id: string; name: string | null; image: string | null }
 }
 
-// Note: This is a UI-only chat panel using local state.
-// To add real-time persistence, connect to a WebSocket or Pusher channel.
+const POLL_MS = 3000
+
 export default function GroupChatPanel({ groupId, groupName }: { groupId: string; groupName: string }) {
   const [open, setOpen] = useState(false)
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState("")
+  const [sending, setSending] = useState(false)
+  const [myUserId, setMyUserId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const lastIdRef = useRef<string | null>(null)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  function sendMessage() {
-    if (!input.trim()) return
-    setMessages((prev) => [
-      ...prev,
-      { id: Date.now().toString(), text: input.trim(), sender: "You", time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) },
-    ])
+  // Fetch session once on mount
+  useEffect(() => {
+    fetch("/api/auth/session")
+      .then((r) => r.json())
+      .then((s) => setMyUserId(s?.user?.id ?? null))
+  }, [])
+
+  const fetchMessages = useCallback(async (initial = false) => {
+    if (initial) setLoading(true)
+    try {
+      const url = !initial && lastIdRef.current
+        ? `/api/groups/${groupId}/messages?cursor=${lastIdRef.current}`
+        : `/api/groups/${groupId}/messages`
+      const res = await fetch(url)
+      if (!res.ok) return
+      const data: ChatMessage[] = await res.json()
+      if (data.length === 0) return
+      setMessages((prev) => {
+        const existingIds = new Set(prev.map((m) => m.id))
+        const newOnes = data.filter((m) => !existingIds.has(m.id))
+        return newOnes.length > 0 ? [...prev, ...newOnes] : prev
+      })
+      lastIdRef.current = data[data.length - 1].id
+    } finally {
+      if (initial) setLoading(false)
+    }
+  }, [groupId])
+
+  // Start/stop polling when panel opens or closes
+  useEffect(() => {
+    if (open) {
+      fetchMessages(true)
+      pollRef.current = setInterval(() => fetchMessages(false), POLL_MS)
+    } else {
+      if (pollRef.current) clearInterval(pollRef.current)
+    }
+    return () => { if (pollRef.current) clearInterval(pollRef.current) }
+  }, [open, fetchMessages])
+
+  // Scroll to bottom whenever messages change and panel is open
+  useEffect(() => {
+    if (open) bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [messages, open])
+
+  async function sendMessage() {
+    const text = input.trim()
+    if (!text || sending) return
+    setSending(true)
     setInput("")
+    try {
+      const res = await fetch(`/api/groups/${groupId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      })
+      if (res.ok) {
+        const msg: ChatMessage = await res.json()
+        setMessages((prev) => {
+          if (prev.find((m) => m.id === msg.id)) return prev
+          return [...prev, msg]
+        })
+        lastIdRef.current = msg.id
+      }
+    } finally {
+      setSending(false)
+    }
+  }
+
+  function formatTime(iso: string) {
+    return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
   }
 
   return (
@@ -52,18 +122,45 @@ export default function GroupChatPanel({ groupId, groupName }: { groupId: string
         </div>
 
         {/* Messages */}
-        <div className="flex-1 space-y-3 overflow-y-auto p-4">
-          {messages.length === 0 ? (
-            <p className="text-center text-xs text-zinc-600 mt-8">No messages yet. Say something!</p>
-          ) : messages.map((m) => (
-            <div key={m.id} className={cn("flex flex-col", m.sender === "You" ? "items-end" : "items-start")}>
-              <div className={cn("max-w-[85%] rounded-2xl px-3 py-2 text-sm",
-                m.sender === "You" ? "bg-indigo-600 text-white rounded-tr-none" : "bg-zinc-800 text-zinc-200 rounded-tl-none")}>
-                {m.text}
-              </div>
-              <span className="mt-0.5 text-[10px] text-zinc-600">{m.sender} · {m.time}</span>
+        <div className="flex-1 overflow-y-auto p-4">
+          {loading ? (
+            <div className="flex justify-center pt-8">
+              <Loader2 className="h-5 w-5 animate-spin text-zinc-600" />
             </div>
-          ))}
+          ) : messages.length === 0 ? (
+            <p className="mt-8 text-center text-xs text-zinc-600">No messages yet. Say something!</p>
+          ) : (
+            <div className="space-y-3">
+              {messages.map((m) => {
+                const isMe = m.user.id === myUserId
+                return (
+                  <div key={m.id} className={cn("flex flex-col", isMe ? "items-end" : "items-start")}>
+                    {/* Avatar + name for others */}
+                    {!isMe && (
+                      <div className="mb-1 flex items-center gap-1.5">
+                        {m.user.image ? (
+                          <Image src={m.user.image} alt={m.user.name ?? ""} width={16} height={16} className="rounded-full" />
+                        ) : (
+                          <div className="flex h-4 w-4 items-center justify-center rounded-full bg-zinc-700 text-[9px] font-bold text-zinc-300">
+                            {m.user.name?.[0] ?? "?"}
+                          </div>
+                        )}
+                        <span className="text-[10px] text-zinc-500">{m.user.name?.split(" ")[0] ?? "User"}</span>
+                      </div>
+                    )}
+                    <div className={cn(
+                      "max-w-[85%] rounded-2xl px-3 py-2 text-sm",
+                      isMe ? "bg-indigo-600 text-white rounded-tr-none" : "bg-zinc-800 text-zinc-200 rounded-tl-none"
+                    )}>
+                      {m.text}
+                    </div>
+                    <span className="mt-0.5 text-[10px] text-zinc-600">{formatTime(m.createdAt)}</span>
+                  </div>
+                )
+              })}
+              <div ref={bottomRef} />
+            </div>
+          )}
         </div>
 
         {/* Input */}
@@ -75,9 +172,10 @@ export default function GroupChatPanel({ groupId, groupName }: { groupId: string
               onKeyDown={(e) => e.key === "Enter" && sendMessage()}
               placeholder="Type a message…"
               className="flex-1 text-sm"
+              disabled={sending}
             />
-            <Button size="icon" onClick={sendMessage} disabled={!input.trim()} className="h-9 w-9 flex-shrink-0">
-              <Send className="h-4 w-4" />
+            <Button size="icon" onClick={sendMessage} disabled={!input.trim() || sending} className="h-9 w-9 flex-shrink-0">
+              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </Button>
           </div>
         </div>
